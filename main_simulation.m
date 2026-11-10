@@ -1,8 +1,9 @@
 %  Optimal Control of Multidrug-Resistant Tuberculosis Dynamics with Treatment Non-Adherence and Relapse
 clear; clc; close all;
-% Figures are drawn at their printed width (16 cm), so a 9 pt font stays 9 pt in the paper
-set(groot,'defaultAxesFontName','Times New Roman','defaultAxesFontSize',9, ...
-          'defaultTextFontSize',9,'defaultLegendFontSize',9,'defaultLineLineWidth',1.4,'defaultFigureColor','w');
+% Figures
+set(groot,'defaultAxesFontName','Times New Roman','defaultTextFontName','Times New Roman', ...
+          'defaultLegendFontName','Times New Roman','defaultAxesFontSize',10, ...
+          'defaultTextFontSize',10,'defaultLegendFontSize',10,'defaultLineLineWidth',1.4,'defaultFigureColor','w');
 
 %% 1. SPECIFIED PARAMETERS AND CALIBRATION TARGETS ------------------------
 N0 = 1e5;                   % per 100,000 population (Proposition 1)
@@ -128,7 +129,7 @@ end
 % ---- Figure 3: trajectories ----
 sty = {'-','--','-.','-'}; col = {[0 0 0],[0 0.45 0.74],[0.85 0.33 0.10],[0.47 0.67 0.19]};
 lw  = [2.0 1.3 1.3 2.4]; ord = [1 4 3 2];        % thick lines underneath, thin lines on top
-f3 = figure(3); clf(f3); set(f3,'Name','Figure 3: Trajectories','NumberTitle','off','Units','centimeters','Position',[2 2 16 15]); tiledlayout(3,3,'TileSpacing','compact');
+f3 = figure(3); clf(f3); set(f3,'WindowStyle','normal','Name','Figure 3: Trajectories','NumberTitle','off','Units','centimeters','Position',[2 2 16 18]); tiledlayout(3,3,'TileSpacing','compact');
 ttl = {'(a) Susceptible, S','(b) Latent DS, E_S','(c) Latent MDR, E_D', ...
        '(d) Active DS-TB, I','(e) Active MDR-TB, D','(f) Recovered DS, R_S', ...
        '(g) Recovered MDR, R_D','(h) Acquired-resistance rate','(i) Cumulative MDR/RR cases'};
@@ -145,11 +146,13 @@ for p = 1:9
     if p == 8, ylabel('per 100,000 per year'); else, ylabel('per 100,000'); end
     grid on; box on;
 end
-lg = legend(hL, names, 'Orientation','horizontal','FontSize',9); lg.Layout.Tile = 'south';
-exportgraphics(f3,'Figure3_trajectories.pdf','ContentType','vector');
+lg = legend(hL, names, 'Orientation','horizontal','FontSize',10); lg.Layout.Tile = 'south';
+% printed on a fixed 16 x 18 cm page, so the size does not depend on the screen or browser window
+set(f3,'PaperUnits','centimeters','PaperPositionMode','manual','PaperPosition',[0 0 16 18],'PaperSize',[16 18]);
+drawnow; print(f3,'Figure_3_Trajectories.pdf','-dpdf','-vector');
 
 % ---- Figure 4: controls ----
-f4 = figure(4); clf(f4); set(f4,'Name','Figure 4: Optimal controls','NumberTitle','off','Units','centimeters','Position',[2 2 16 6]); tiledlayout(1,2,'TileSpacing','compact');
+f4 = figure(4); clf(f4); set(f4,'WindowStyle','normal','Name','Figure 4: Optimal controls','NumberTitle','off','Units','centimeters','Position',[2 2 16 7]); tiledlayout(1,2,'TileSpacing','compact');
 nexttile; hold on;
 h3 = plot(R{4}.t,R{4}.u1,'-','Color',col{4},'LineWidth',2.4);
 h1 = plot(R{2}.t,R{2}.u1,'--','Color',col{2},'LineWidth',1.3);
@@ -160,7 +163,7 @@ h3 = plot(R{4}.t,R{4}.u2,'-','Color',col{4},'LineWidth',2.4);
 h2 = plot(R{3}.t,R{3}.u2,'-.','Color',col{3},'LineWidth',1.3);
 xlim([0 oc.T]); xticks(0:1:oc.T); ylim([0 1.05]); title('(b) Second-line treatment u_2^*(t)'); xlabel('Time (years)'); ylabel('Control intensity');
 grid on; box on; legend([h2 h3],names([3 4]),'Location','southwest');
-exportgraphics(f4,'Figure4_controls.pdf','ContentType','vector');
+drawnow; exportgraphics(f4,'Figure_4_Optimal_controls.pdf','ContentType','vector');
 
 %% 5. CONVERGENCE DIAGNOSTICS (Section 3.8, Table 6) ---------------------
 banner('NUMERICAL CONVERGENCE, Case III  (Section 3.8, Table 6)');
@@ -201,25 +204,32 @@ else
     S = rngs(:,1)' + U.*(rngs(:,2)-rngs(:,1))';
 end
 parNames = {'\beta','\phi','\psi','\tau','D_I','CFR_I','f_L','CFR_D','D_D','\rho','\epsilon_S','\kappa','\xi_2'};
-keep = false(Nd,1); PAR = nan(Nd,13); OUT = nan(Nd,9);
+keep = false(Nd,1); PAR = nan(Nd,13); OUT = nan(Nd,9); EXT = nan(Nd,6); REJ = nan(Nd,6);
 o = oc; o.M = 200;
 for n = 1:Nd
     f = fx; f.CFR_I = S(n,6); f.fL = S(n,7); f.CFR_D = S(n,8); f.D_D = S(n,9);
     f.rho = S(n,10); f.eS = S(n,11); f.kappa = S(n,12); f.xi2 = S(n,13);
     [thn, err] = calibrate(f, S(n,1:5), th, N0);
-    if err > 1e-6, continue; end                         % no exact solution of Eq. (6)
     Pn = derived(thn, f, N0); Xn = equilibrium(Pn, N0); if isempty(Xn), continue; end
     [rs, rd] = R0s(Pn);
-    o.use1 = 0; o.use2 = 0; mn = metrics(solveOC(Xn,Pn,o,N0),Pn,o);
+    mm = runCases(Xn, Pn, o, use, N0); mn = mm{1};
     rD = zeros(1,3); Jn = zeros(1,3); rA = zeros(1,3);
     for c = 2:4
-        o.use1 = use(c,1); o.use2 = use(c,2); m = metrics(solveOC(Xn,Pn,o,N0),Pn,o);
+        m = mm{c};
         rD(c-1) = 100*(1-m.PY_D/mn.PY_D); Jn(c-1) = m.J; rA(c-1) = 100*(1-m.CumAcq/mn.CumAcq);
+    end
+    if err > 1e-6                                        % no exact solution of Eq. (6):
+        REJ(n,:) = [thn(3), rd/rs, err, rD];             % kept only as a diagnostic, at the best approximate fit
+        continue;
     end
     keep(n) = true; PAR(n,:) = [thn, S(n,6:13)];
     OUT(n,:) = [rs rd rD rA(3) Jn];      % RSS RDD rD_I rD_II rD_III rAcq_III J_I J_II J_III
+    % added value of Case III: extra MDR-TB reduction vs II (points), C2(III)/C2(II), C1(III)/C1(I),
+    % DS-TB reduction (III), extra deaths averted vs II, extra MDR-TB reduction vs I (points)
+    EXT(n,:) = [100*(mm{3}.PY_D-mm{4}.PY_D)/mn.PY_D, mm{4}.C2/mm{3}.C2, mm{4}.C1/mm{2}.C1, ...
+                100*(1-mm{4}.PY_I/mn.PY_I), mm{3}.Deaths-mm{4}.Deaths, 100*(mm{2}.PY_D-mm{4}.PY_D)/mn.PY_D];
 end
-PAR = PAR(keep,:); OUT = OUT(keep,:); nk = sum(keep);
+PAR = PAR(keep,:); OUT = OUT(keep,:); EXT = EXT(keep,:); nk = sum(keep);
 q = @(x) [median(x) prctile_(x,2.5) prctile_(x,97.5)];
 fprintf('  Admissible samples: %d of %d (%d rejected)\n', nk, Nd, Nd-nk);
 fprintf('  %-26s %8s %18s\n','Quantity','Median','95% interval');
@@ -229,8 +239,30 @@ for c = 1:3
     fprintf('  %-26s %7.1f%% %7.1f%% - %6.1f%%   (min %.1f%%)\n', ['MDR-TB reduction, ' names{c+1}], q(OUT(:,2+c)), min(OUT(:,2+c)));
 end
 fprintf('  P(R_DD > 1) = %.2f\n', mean(OUT(:,2)>1));
-fprintf('  Case III has the lowest J in %.0f%% of samples; J(II) < J(I) in %.0f%%\n', ...
+fprintf('  Case III has the lowest J in %.0f%% of samples (guaranteed, check only); J(II) < J(I) in %.0f%%\n', ...
     100*mean(OUT(:,9)<=OUT(:,7) & OUT(:,9)<=OUT(:,8)), 100*mean(OUT(:,8)<OUT(:,7)));
+fprintf('\nAdded value of Case III (health benefits and control efforts, Section 3.9)\n');
+fprintf('  extra MDR-TB reduction vs Case II  %5.1f points (%.1f - %.1f), min %.2f\n', q(EXT(:,1)), min(EXT(:,1)));
+fprintf('  extra MDR-TB reduction vs Case I   %5.1f points (%.1f - %.1f)\n', q(EXT(:,6)));
+fprintf('  C2(III)/C2(II) %.3f (%.3f - %.3f), max %.3f;  C1(III)/C1(I) %.4f - %.4f\n', q(EXT(:,2)), max(EXT(:,2)), min(EXT(:,3)), max(EXT(:,3)));
+fprintf('  acquired-resistance reduction %.1f%% (%.1f - %.1f%%)\n', q(OUT(:,6)));
+fprintf('  DS-TB reduction %.1f%% (%.1f - %.1f%%); extra deaths averted vs II %.1f (%.1f - %.1f)\n', q(EXT(:,4)), q(EXT(:,5)));
+
+fprintf('\nExcluded samples (Section 3.9)\n');
+rj = ~keep & ~isnan(REJ(:,1));
+fprintf('  %d of %d rejected samples have an approximate equilibrium: psi <= %.2e, R_DD/R_SS >= %.5f\n', sum(rj), Nd-nk, max(REJ(rj,1)), min(REJ(rj,2)));
+fprintf('  largest relative residual %.1e - %.3f (median %.3f)\n', min(REJ(rj,3)), max(REJ(rj,3)), median(REJ(rj,3)));
+inNames = {'inc','prev','rrn','rrinc','ltbi','CFR_I','fL','CFR_D','D_D','rho','eS','kappa','xi2'};
+fprintf('  %-6s %12s %12s %10s   (Mann-Whitney, normal approximation)\n','Input','retained','rejected','p');
+for j = 1:13
+    fprintf('  %-6s %12.4g %12.4g %10.1e\n', inNames{j}, median(S(keep,j)), median(S(~keep,j)), mwp_(S(keep,j), S(~keep,j)));
+end
+for c = 1:3
+    fprintf('  rejected, %-9s MDR-TB reduction %6.2f%% (%.2f - %.2f%%), range %.3f - %.3f\n', names{c+1}, q(REJ(rj,3+c)), min(REJ(rj,3+c)), max(REJ(rj,3+c)));
+end
+for c = 1:3
+    fprintf('  all samples, %-9s MDR-TB reduction %5.1f%% (%.1f - %.1f%%)\n', names{c+1}, q([OUT(:,2+c); REJ(rj,3+c)]));
+end
 pr = prcc(PAR, OUT(:,5));
 dof = nk - 13 - 1;                                     % partial correlation with 12 controls
 tcrit = fzero(@(t) betainc(dof/(dof+t^2), dof/2, 0.5) - 0.01, [1 10]);   % two-sided p = 0.01
@@ -242,10 +274,33 @@ for j = ix
     if abs(pr(j)) > rcrit, sg = 'significant'; else, sg = 'n.s.'; end
     fprintf('  %-12s %+8.3f   %9.4g - %-10.4g %s\n', strrep(strrep(parNames{j},'\',''),'_',''), pr(j), prctile_(PAR(:,j),2.5), prctile_(PAR(:,j),97.5), sg);
 end
+% Dependencies among the PRCC inputs (Section 3.9)
+Rk = zeros(nk,13); for j = 1:13, Rk(:,j) = tiedrank_(PAR(:,j)); end
+RS = corrcoef(Rk);                                     % Spearman rank correlations
+[ii,jj] = find(triu(true(13),1)); [~,o2] = sort(abs(RS(sub2ind([13 13],ii,jj))),'descend');
+fprintf('\nLargest Spearman correlations among the PRCC inputs\n');
+for k = o2(1:6)'
+    fprintf('  %-8s %-8s %+.2f\n', strrep(strrep(parNames{ii(k)},'\',''),'_',''), strrep(strrep(parNames{jj(k)},'\',''),'_',''), RS(ii(k),jj(k)));
+end
+VIF = zeros(1,13); R2 = zeros(1,13);
+for j = 1:13
+    Z = [ones(nk,1) Rk(:,setdiff(1:13,j))]; e = Rk(:,j) - Z*(Z\Rk(:,j));
+    R2(j) = 1 - sum(e.^2)/sum((Rk(:,j)-mean(Rk(:,j))).^2); VIF(j) = 1/(1-R2(j));
+end
+fprintf('  Rank R^2 of each input on the other twelve inputs\n');
+for j = 1:13, fprintf('    %-8s R2 = %.3f  VIF = %5.2f   simple rank corr. with outcome %+.3f\n', strrep(strrep(parNames{j},'\',''),'_',''), R2(j), VIF(j), corr_(Rk(:,j), tiedrank_(OUT(:,5)))); end
+pr2 = prcc(S(keep,:), OUT(:,5));                      % PRCC with the independently sampled inputs
+Rs2 = corrcoef(cell2mat(arrayfun(@(j) tiedrank_(S(keep,j)), 1:13, 'UniformOutput', false)));
+fprintf('PRCC with the 13 independently sampled inputs (max |rank corr.| %.2f)\n', max(abs(Rs2(~eye(13)))));
+[~,ix2] = sort(abs(pr2),'descend');
+for j = ix2
+    if abs(pr2(j)) > rcrit, sg = 'significant'; else, sg = 'n.s.'; end
+    fprintf('  %-8s %+8.3f %s\n', inNames{j}, pr2(j), sg);
+end
 
 % ---- Figure 5: uncertainty ----
-f5 = figure(5); clf(f5); set(f5,'Name','Figure 5: Uncertainty and PRCC','NumberTitle','off','Units','centimeters','Position',[2 2 16 7]); tiledlayout(1,3,'TileSpacing','compact');
-nexttile; hold on;
+f5 = figure(5); clf(f5); set(f5,'WindowStyle','normal','Name','Figure 5: Uncertainty and PRCC','NumberTitle','off','Units','centimeters','Position',[2 2 16 13]); tiledlayout(2,2,'TileSpacing','compact');
+nexttile(1); hold on;                                % (a) top left
 histogram(OUT(:,1),20,'FaceAlpha',0.6); histogram(OUT(:,2),20,'FaceAlpha',0.6);
 xline(1,'k--','LineWidth',1.5); legend({'R_{SS}','R_{DD}','threshold'},'Location','northwest');
 xlabel('Reproduction number'); ylabel('Samples');
@@ -254,23 +309,23 @@ title(sprintf('(a) P(R_{DD} > 1) = %.2f', mean(OUT(:,2)>1))); box on;
 C = repmat([0.70 0.70 0.70],13,1);
 C(vv>0 & isSig,:) = repmat([0.16 0.47 0.85],sum(vv>0 & isSig),1);
 C(vv<0 & isSig,:) = repmat([0.84 0.24 0.24],sum(vv<0 & isSig),1);
-nexttile; hold on;
+nexttile(2,[2 1]); hold on;                          % (b) right column, full height
 bh = barh(1:13, vv, 0.65, 'FaceColor','flat', 'EdgeColor','none'); bh.CData = C;
 xline(0,'k-'); xline([-rcrit rcrit],'--','Color',[0.4 0.4 0.4],'LineWidth',1);
 for j = 1:13
     lab = sprintf('%+.2f', vv(j)); if ~isSig(j), lab = [lab ' n.s.']; end %#ok<AGROW>
     xl = max(abs(vv(j)), rcrit) + 0.04;
-    if vv(j) >= 0, text(xl, j, lab,'HorizontalAlignment','left','FontSize',7);
-    else, text(-xl, j, lab,'HorizontalAlignment','right','FontSize',7); end
+    if vv(j) >= 0, text(xl, j, lab,'HorizontalAlignment','left','FontSize',9);
+    else, text(-xl, j, lab,'HorizontalAlignment','right','FontSize',9); end
 end
 set(gca,'YTick',1:13,'YTickLabel',parNames(ordp),'TickLabelInterpreter','tex');
 ylim([0.4 13.6]); xlim([-1.45 1.45]); xticks(-1:0.5:1);
 xlabel('PRCC with MDR-TB reduction (Case III)'); title('(b) Global sensitivity'); grid on; box on;
-nexttile; hold on;
+nexttile(3); hold on;                                % (c) bottom left
 histogram(OUT(:,3),15,'FaceAlpha',0.5); histogram(OUT(:,4),15,'FaceAlpha',0.5); histogram(OUT(:,5),15,'FaceAlpha',0.5);
-legend(names(2:4)); xlabel('Reduction in MDR-TB person-years (%)'); ylabel('Samples');
+legend(names(2:4),'Location','northwest'); xlabel('Reduction in MDR-TB person-years (%)'); ylabel('Samples');
 title('(c) Benefit under uncertainty'); box on;
-exportgraphics(f5,'Figure5_uncertainty.pdf','ContentType','vector');
+drawnow; exportgraphics(f5,'Figure_5_Uncertainty_and_PRCC.pdf','ContentType','vector');
 
 %% 7. SENSITIVITY TO WEIGHTS, EFFICACIES AND BOUNDS (Section 3.10, Figure 6)
 banner('WEIGHTS, EFFICACIES, BOUNDS AND HORIZON  (Section 3.10, Figure 6)');
@@ -296,25 +351,31 @@ fprintf('  Acquired-resistance reduction over (W1, kappa):   %5.1f%% - %5.1f%%  
     min(HB(:)), max(HB(:)), max(HBI(:)));
 JA2 = []; Jcor = []; Hz = []; Umax = []; KE = [];
 fprintf('\nObjective J by case\n  %-24s %9s %9s %9s\n','Weights','Case I','Case II','Case III');
+ADD = [];                          % added value of Case III for each weight setting
 for A2 = oc.A1*[1 10 100]
-    Jc = zeros(1,3);
+    Jc = zeros(1,3); Mk = cell(1,3);
     for c = 2:4
-        o = oc; o.M = 250; o.A2 = A2; o.use1 = use(c,1); o.use2 = use(c,2); mk = metrics(solveOC(X0,P,o,N0),P,o); Jc(c-1) = mk.J;
+        o = oc; o.M = 250; o.A2 = A2; o.use1 = use(c,1); o.use2 = use(c,2); mk = metrics(solveOC(X0,P,o,N0),P,o); Jc(c-1) = mk.J; Mk{c-1} = mk;
     end
+    ADD(end+1,:) = addedValue(Mk, ncR); %#ok<SAGROW>
     JA2(end+1,:) = [A2/oc.A1 Jc]; %#ok<SAGROW>
     fprintf('  %-24s %9.2f %9.2f %9.2f\n', sprintf('A2/A1 = %d',round(A2/oc.A1)), Jc);
 end
 for w1 = oc.W1*[0.1 10]
     for w2 = oc.W2*[0.1 10]
-        Jc = zeros(1,3);
+        Jc = zeros(1,3); Mk = cell(1,3);
         for c = 2:4
             o = oc; o.M = 250; o.W1 = w1; o.W2 = w2; o.use1 = use(c,1); o.use2 = use(c,2);
-            mk = metrics(solveOC(X0,P,o,N0),P,o); Jc(c-1) = mk.J;
+            mk = metrics(solveOC(X0,P,o,N0),P,o); Jc(c-1) = mk.J; Mk{c-1} = mk;
         end
+        ADD(end+1,:) = addedValue(Mk, ncR); %#ok<SAGROW>
         Jcor(end+1,:) = [w1 w2 Jc]; %#ok<SAGROW>
         fprintf('  %-24s %9.2f %9.2f %9.2f\n', sprintf('W1 = %g, W2 = %g',w1,w2), Jc);
     end
 end
+fprintf('\nAdded value of Case III in the seven weight settings above (rows in the same order)\n');
+fprintf('  %10s %10s %10s %10s %12s %12s\n','MDR I','MDR II','MDR III','extra pts','acq. red.','C2 III/II');
+for k = 1:size(ADD,1), fprintf('  %9.2f%% %9.2f%% %9.2f%% %10.2f %11.1f%% %12.4f\n', ADD(k,:)); end
 fprintf('\nHorizon T (Case III reductions)\n  %6s %9s %9s %10s\n','T (yr)','MDR-TB','DS-TB','Acquired');
 for T = [3 5 10]
     o = oc; o.T = T; o.M = 80*T; o.use1 = 0; o.use2 = 0; mn = metrics(solveOC(X0,P,o,N0),P,o);
@@ -338,15 +399,37 @@ for kE = [2 3]
     fprintf('  %-14s %8.4f %8.3f %9.1f%% %10.1e\n', sprintf('%d x eps_S',kE), th2(3), rd2, KE(end,4), e2);
 end
 
+%% 8. RE-ESTIMATION WITH THE VALIDATION INDICATORS (Section 3.11, limitation iii)
+banner('RE-ESTIMATION WITH THE VALIDATION INDICATORS  (Section 3.11)');
+VAL = [];
+o = oc; o.M = 250;
+fprintf('  %-26s %7s %7s %7s %8s %8s %7s %7s %7s %8s %8s %8s %8s\n','Re-estimation','psi','phi','R_DD','MDR/RR','acq.sh.', ...
+        'MDR I','MDR II','MDR III','J(I)','J(II)','C2(III)','DS III');
+for rrp = 0.13           % 13% MDR among previously treated cases (national estimate)
+    tgV = tg; tgV(4) = rrp;
+    [thV, eV] = calibrate(fx, tgV, th, N0, true); PV = derived(thV, fx, N0); XV = equilibrium(PV, N0);
+    iV = indicators(XV, PV); [~, rdV] = R0s(PV); mV = runCases(XV, PV, o, use, N0);
+    rV = arrayfun(@(c) 100*(1-mV{c}.PY_D/mV{1}.PY_D), 2:4);
+    VAL(end+1,:) = [rrp, thV(3), thV(2), rdV, iV.rrinc, iV.acqshare, rV, mV{2}.J, mV{3}.J, mV{4}.C2, 100*(1-mV{4}.PY_I/mV{1}.PY_I), eV]; %#ok<SAGROW>
+    fprintf('  %-26s %7.3f %7.3f %7.3f %8.2f %8.3f %6.1f%% %6.1f%% %6.1f%% %8.2f %8.2f %8.2f %7.1f%%  (res. %.1e)\n', ...
+            sprintf('MDR prev. treated = %g%%',100*rrp), VAL(end,2:end));
+end
+cfrM = fzero(@(c) deathsFor(c, fx, tg, th, N0) - 44.5, [fx.CFR_I 0.2]);   % disease-induced deaths = 44.5
+fM = fx; fM.CFR_I = cfrM; thM = calibrate(fM, tg, th, N0); PM = derived(thM, fM, N0); XM = equilibrium(PM, N0);
+mM = runCases(XM, PM, o, use, N0); rM = arrayfun(@(c) 100*(1-mM{c}.PY_D/mM{1}.PY_D), 2:4);
+fprintf('  Mortality 44.5: CFR_I = %.4f, MDR-TB reductions %.1f%%, %.1f%%, %.1f%%\n', cfrM, rM);
+mB = runCases(X0, P, o, use, N0); rB = arrayfun(@(c) 100*(1-mB{c}.PY_D/mB{1}.PY_D), 2:4);
+fprintf('  Baseline (same grid):          MDR-TB reductions %.1f%%, %.1f%%, %.1f%%\n', rB);
 
 % ---- Figure 6: robustness heat maps ----
-f6 = figure(6); clf(f6); set(f6,'Name','Figure 6: Robustness','NumberTitle','off','Units','centimeters','Position',[2 2 16 6.5]); tiledlayout(1,2,'TileSpacing','compact');
+f6 = figure(6); clf(f6); set(f6,'WindowStyle','normal','Name','Figure 6: Robustness','NumberTitle','off','Units','centimeters','Position',[2 2 16 12]); tiledlayout(2,1,'TileSpacing','compact');
 heat(nexttile, HA, W2s, xis, 'Second-line weight W_2', 'Efficacy \xi_2', '(a) MDR-TB person-year reduction (%)');
 heat(nexttile, HB, W1s, kaps, 'DOT weight W_1', 'Efficacy \kappa', '(b) Acquired-resistance reduction (%)');
-exportgraphics(f6,'Figure6_robustness.pdf','ContentType','vector');
+drawnow; exportgraphics(f6,'Figure_6_Robustness.pdf','ContentType','vector');
 
 save('results_for_check.mat','fx','tg','th','P','X0','ind','RSS','RDD','ev','a_bif','b_bif','R','Mt','oc', ...
-     'Ms','Jg','Jinit','HA','HB','HBI','JA2','Jcor','Hz','Umax','KE','OUT','PAR','nk','Nd','pr','rcrit');
+     'Ms','Jg','Jinit','HA','HB','HBI','JA2','Jcor','Hz','Umax','KE','OUT','PAR','nk','Nd','pr','rcrit', ...
+     'EXT','REJ','keep','RS','R2','VIF','pr2','ADD','VAL','cfrM','rM','rB');
 banner('DONE');
 fprintf('Figures 3-6 saved as vector PDF; all results saved to results_for_check.mat\n');
 
@@ -399,12 +482,14 @@ function ind = indicators(X, P)
     ind.acqshare = acq/ind.rrinc;
 end
 
-function r = calres(lt, fx, tg, N0)
+function r = calres(lt, fx, tg, N0, useRrp)
+    % useRrp = true replaces the MDR/RR-TB incidence target by MDR among previously treated cases
     th = exp(lt); P = derived(th, fx, N0);
     if P.aI <= 0 || P.gam <= 0 || P.aD <= 0, r = 10*ones(5,1); return; end
     X = equilibrium(P, N0); if isempty(X), r = 10*ones(5,1); return; end
     ind = indicators(X, P);
-    r = log([ind.inc; ind.prev; ind.rrn; ind.rrinc; ind.ltbi]./tg(:));
+    if useRrp, v4 = ind.rrp; else, v4 = ind.rrinc; end
+    r = log([ind.inc; ind.prev; ind.rrn; v4; ind.ltbi]./tg(:));
 end
 
 function [x, res] = lm(fun, x0)                        % Levenberg-Marquardt
@@ -433,11 +518,12 @@ function [x, res] = lm(fun, x0)                        % Levenberg-Marquardt
     res = max(abs(r));
 end
 
-function [th, maxres] = calibrate(fx, tg, th0, N0)
+function [th, maxres] = calibrate(fx, tg, th0, N0, useRrp)
+    if nargin < 5, useRrp = false; end
     starts = [th0; 2.0 0.6 0.05 0.009 2.0; 1.5 0.4 0.1 0.012 1.5; 3.0 0.8 0.03 0.007 2.5; 2.5 0.5 0.02 0.01 3.0];
     maxres = inf; th = th0;
     for k = 1:size(starts,1)
-        [x, e] = lm(@(lt) calres(lt,fx,tg,N0), log(starts(k,:)));
+        [x, e] = lm(@(lt) calres(lt,fx,tg,N0,useRrp), log(starts(k,:)));
         if e < maxres, maxres = e; th = exp(x(:)'); end
         if maxres < 1e-10, break; end
     end
@@ -455,7 +541,7 @@ function dX = rhs(X, u1, u2, P, N0)                   % Eq. (3)
           cureD*D - (P.eD+P.rho+P.mu)*RD];
 end
 
-function dL = adjrhs(L, X, u1, u2, P, A1, A2, N0)      % Eq. (11)
+function dL = adjrhs(L, X, u1, u2, P, A1, A2, N0)      % Eq. (8)
     S=X(1); I=X(4); D=X(5);
     lS=L(1); lES=L(2); lED=L(3); lI=L(4); lD=L(5); lRS=L(6); lRD=L(7);
     acq = P.psi*P.sig*(1-P.kappa*u1); cureD = P.dl*(1+P.xi2*u2);
@@ -498,8 +584,8 @@ function r = solveOC(X0, P, o, N0)                     % Forward-Backward Sweep
         for it = 1:o.maxit
             X = forwardRK4(X0,u1,u2,P,h,N0);
             L = backwardRK4(X,u1,u2,P,h,o.A1,o.A2,N0);
-            v1 = P.kappa*P.sig*X(:,4)'.*((1-P.psi)*L(:,4)' + P.psi*L(:,5)' - L(:,6)')/o.W1;   % Eq. (13)
-            v2 = P.xi2*P.dl*X(:,5)'.*(L(:,5)' - L(:,7)')/o.W2;                               % Eq. (14)
+            v1 = P.kappa*P.sig*X(:,4)'.*((1-P.psi)*L(:,4)' + P.psi*L(:,5)' - L(:,6)')/o.W1;   % Eq. (10)
+            v2 = P.xi2*P.dl*X(:,5)'.*(L(:,5)' - L(:,7)')/o.W2;                               % Eq. (11)
             v1 = min(o.u1max, max(0, v1))*o.use1;  v2 = min(o.u2max, max(0, v2))*o.use2;
             n1 = o.om*v1 + (1-o.om)*u1;  n2 = o.om*v2 + (1-o.om)*u2;                        % relaxation
             if isempty(Xo), e = 1; else
@@ -540,7 +626,7 @@ function heat(ax, H, xv, yv, xl, yl, ttl)
     for i = 1:size(H,1)
         for j = 1:size(H,2)
             if H(i,j) > mid, tc = 'k'; else, tc = 'w'; end
-            text(ax, j, i, sprintf('%.0f',H(i,j)),'HorizontalAlignment','center','Color',tc,'FontWeight','bold','FontSize',8);
+            text(ax, j, i, sprintf('%.0f',H(i,j)),'HorizontalAlignment','center','Color',tc,'FontWeight','bold','FontSize',10);
         end
     end
 end
@@ -563,4 +649,31 @@ function pr = prcc(Xp, y)
         ex = Rk(:,j) - Z*(Z\Rk(:,j)); ey = ry - Z*(Z\ry);
         c = corrcoef(ex, ey); pr(j) = c(1,2);
     end
+end
+
+function m = runCases(X0, P, o, use, N0)               % no control and Cases I-III
+    m = cell(1,4);
+    for c = 1:4
+        o.use1 = use(c,1); o.use2 = use(c,2); m{c} = metrics(solveOC(X0,P,o,N0),P,o);
+    end
+end
+
+function a = addedValue(Mk, nc)                        % Mk = {Case I, Case II, Case III}
+    r = cellfun(@(m) 100*(1-m.PY_D/nc.PY_D), Mk);
+    a = [r, r(3)-max(r(1:2)), 100*(1-Mk{3}.CumAcq/nc.CumAcq), Mk{3}.C2/Mk{2}.C2];
+end
+
+function d = deathsFor(cfr, fx, tg, th0, N0)           % disease-induced deaths after re-estimation
+    f = fx; f.CFR_I = cfr; th = calibrate(f, tg, th0, N0); P = derived(th, f, N0);
+    ind = indicators(equilibrium(P, N0), P); d = ind.deaths;
+end
+
+function p = mwp_(a, b)                                % two-sided Mann-Whitney test, normal approximation
+    n1 = numel(a); n2 = numel(b); r = tiedrank_([a(:); b(:)]);
+    U = sum(r(1:n1)) - n1*(n1+1)/2;
+    z = (U - n1*n2/2)/sqrt(n1*n2*(n1+n2+1)/12); p = erfc(abs(z)/sqrt(2));
+end
+
+function c = corr_(a, b)
+    C = corrcoef(a, b); c = C(1,2);
 end
