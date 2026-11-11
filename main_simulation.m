@@ -1,25 +1,31 @@
 %  Optimal Control of Multidrug-Resistant Tuberculosis Dynamics with Treatment Non-Adherence and Relapse
 clear; clc; close all;
-% Figures
+% Figures 
 set(groot,'defaultAxesFontName','Times New Roman','defaultTextFontName','Times New Roman', ...
           'defaultLegendFontName','Times New Roman','defaultAxesFontSize',10, ...
           'defaultTextFontSize',10,'defaultLegendFontSize',10,'defaultLineLineWidth',1.4,'defaultFigureColor','w');
 
 %% 1. SPECIFIED PARAMETERS AND CALIBRATION TARGETS ------------------------
 N0 = 1e5;                   % per 100,000 population (Proposition 1)
-fx.mu    = 1/70;            % life expectancy 70 years [Alhusna et al. 2025]
-fx.CFR_I = 125000/1090000;  % TB deaths / incident TB [Sasmita et al. 2025; WHO 2025: 11.5%]
-fx.fL    = 0.1243;          % drop-out proportion 2021 [Maharani et al. 2024]
-fx.CFR_D = 16/(16+50);      % MDR deaths 16%, success 50% [Amala & Cahyati 2021]
-fx.D_D   = 20/12;           % MDR episode 20 months, longer regimens [WHO 2025]
+fx.mu    = 1/74.15;         % life expectancy at birth 74.15 years, 2024 [BPS 2024]
+fx.CFR_I = 118000/1080000;  % TB deaths (HIV-negative) / incident TB, 2024 [Kemenkes 2025, p. 2]
+fx.fL    = 0.083;           % DS-TB lost to follow-up 8.3%, outcomes reported 2024 [Kemenkes 2025, p. 31]
+fx.CFR_D = 16/(16+59);      % MDR/RR outcomes, cohort 2022: died 16%, success 59% [Kemenkes 2025, pp. 34, 37]
+fx.D_D   = 20/12;           % MDR episode 20 months, longer regimens of 18-20 months [WHO 2025]
 fx.rho   = 0.0941*12;       % loss of immunity 0.0941/month [Alhusna et al. 2025]
 fx.eS    = 0.0106*12;       % relapse 0.0106/month [Alhusna et al. 2025]
 fx.kE    = 1.0;             % eps_D = kE*eps_S (assumption, tested with kE = 2, 3)
 fx.kappa = 1 - 1/4.33;      % DOT efficacy from PMO odds ratio 4.33 [Amala & Cahyati 2021]
-fx.xi2   = 1/0.51 - 1;      % MDR enrolment 51% -> 100% [Amala & Cahyati 2021]
+fx.xi2   = 1/0.65 - 1;      % MDR/RR enrollment 65% in 2022 (cohort of CFR_D) -> 100% [Kemenkes 2025, p. 29]
 
-% targets per 100,000: incidence, prevalence, MDR among new, MDR/RR incidence, latent
-tg = [387, 759, 0.024, 29535/281e6*1e5, 120e6/281e6*N0];
+% targets per 100,000: incidence 382 (1,080,000 cases) in 2024 [Kemenkes 2025, p. 2],
+% prevalence 759 [Noviyani et al. 2021], MDR/RR among new cases 1.8% in 2024 [WHO global TB database],
+% MDR/RR incidence 26,000 cases in 2024 [Kemenkes 2025, p. 2], i.e. 382*26000/1080000 per 100,000,
+% latent infection 35.51% of the population in 2019 [Ding et al. 2022, Table 1]
+pop = 281603799;            % population 2024 [Kemenkes 2025, p. 4]; national counts = per 100,000 x 2,816
+dData = 41;                 % TB deaths (HIV-negative) per 100,000, 2024 [Kemenkes 2025, p. 2] (validation)
+rrpData = 0.18;             % MDR/RR among previously treated cases, 2024 [WHO global TB database] (validation)
+tg = [382, 759, 0.018, 382*26000/1080000, 0.3551*N0];
 
 %% 2. CALIBRATION (Levenberg-Marquardt on log(theta)) ---------------------
 th0 = [2.36 1.04 0.023 0.0083 1.96];
@@ -45,9 +51,9 @@ fprintf('  %-30s %10.2f %10.2f\n','MDR/RR-TB incidence', tg(4), ind.rrinc);
 fprintf('  %-30s %10.0f %10.0f\n','Latent infection', tg(5), ind.ltbi);
 fprintf('\nValidation, not used in the fit (Table 3, limitation iii)\n');
 fprintf('  %-46s %8s %8s\n','Indicator','Data','Model');
-fprintf('  %-46s %8.1f %8.1f\n','TB deaths, disease-induced (per 100,000)', 44.5, ind.deaths);
-fprintf('  %-46s %8.1f %8.1f\n','TB deaths, all deaths during an episode', 44.5, (P.aI+P.mu)*X0(4)+(P.aD+P.mu)*X0(5));
-fprintf('  %-46s %7.1f%% %7.1f%%\n','MDR among previously treated cases', 13, 100*ind.rrp);
+fprintf('  %-46s %8.1f %8.1f\n','TB deaths, disease-induced (per 100,000)', dData, ind.deaths);
+fprintf('  %-46s %8.1f %8.1f\n','TB deaths, all deaths during an episode', dData, (P.aI+P.mu)*X0(4)+(P.aD+P.mu)*X0(5));
+fprintf('  %-46s %7.1f%% %7.1f%%\n','MDR among previously treated cases', 100*rrpData, 100*ind.rrp);
 fprintf('  Previously treated inflow: loss to follow-up %.1f, relapse %.1f per 100,000 per year\n', ...
     P.sig*X0(4), P.eS*X0(6)+P.eD*X0(7));
 KRS = P.eS+P.rho+P.mu;
@@ -100,8 +106,8 @@ for c = 2:4
 end
 fprintf('\nCase III averts %.1f deaths and %.2f acquired-resistance events per 100,000\n', ...
     Mt{1}.Deaths-Mt{4}.Deaths, Mt{1}.CumAcq-Mt{4}.CumAcq);
-fprintf('  nationally (x 2,810): %.0f deaths and %.0f acquired-resistance events\n', ...
-    2810*(Mt{1}.Deaths-Mt{4}.Deaths), 2810*(Mt{1}.CumAcq-Mt{4}.CumAcq));
+fprintf('  nationally (x 2,816): %.0f deaths and %.0f acquired-resistance events\n', ...
+    pop/1e5*(Mt{1}.Deaths-Mt{4}.Deaths), pop/1e5*(Mt{1}.CumAcq-Mt{4}.CumAcq));
 
 banner('VALUES QUOTED IN SECTIONS 3.4-3.6');
 for c = 2:4
@@ -129,7 +135,7 @@ end
 % ---- Figure 3: trajectories ----
 sty = {'-','--','-.','-'}; col = {[0 0 0],[0 0.45 0.74],[0.85 0.33 0.10],[0.47 0.67 0.19]};
 lw  = [2.0 1.3 1.3 2.4]; ord = [1 4 3 2];        % thick lines underneath, thin lines on top
-f3 = figure(3); clf(f3); set(f3,'WindowStyle','normal','Name','Figure 3: Trajectories','NumberTitle','off','Units','centimeters','Position',[2 2 16 18]); tiledlayout(3,3,'TileSpacing','compact');
+f3 = figure(3); clf(f3); set(f3,'WindowStyle','normal','Name','Figure 3: Trajectories','NumberTitle','off','Units','centimeters','Position',[1 1 16 16.5]); tiledlayout(3,3,'TileSpacing','compact');
 ttl = {'(a) Susceptible, S','(b) Latent DS, E_S','(c) Latent MDR, E_D', ...
        '(d) Active DS-TB, I','(e) Active MDR-TB, D','(f) Recovered DS, R_S', ...
        '(g) Recovered MDR, R_D','(h) Acquired-resistance rate','(i) Cumulative MDR/RR cases'};
@@ -147,9 +153,12 @@ for p = 1:9
     grid on; box on;
 end
 lg = legend(hL, names, 'Orientation','horizontal','FontSize',10); lg.Layout.Tile = 'south';
-% printed on a fixed 16 x 18 cm page, so the size does not depend on the screen or browser window
-set(f3,'PaperUnits','centimeters','PaperPositionMode','manual','PaperPosition',[0 0 16 18],'PaperSize',[16 18]);
-drawnow; print(f3,'Figure_3_Trajectories.pdf','-dpdf','-vector');
+% exported like Figures 4-6 (cropped, at most 16 cm wide), so that it is not reduced in the paper;
+% the size is set again just before export in case the window was resized or did not fit the screen
+set(f3,'WindowState','normal','Units','centimeters'); f3.Position(3:4) = [16 16.5]; drawnow;
+exportgraphics(f3,'Figure3_Trajectories.pdf','ContentType','vector');
+fprintf('  Figure 3 exported from a %.1f x %.1f cm window (should be 16.0 x 16.5)\n', f3.Position(3:4));
+if abs(f3.Position(3)-16) > 0.2, warning('Figure 3 window is not 16 cm wide: undock it, do not resize it, and run this section again.'); end
 
 % ---- Figure 4: controls ----
 f4 = figure(4); clf(f4); set(f4,'WindowStyle','normal','Name','Figure 4: Optimal controls','NumberTitle','off','Units','centimeters','Position',[2 2 16 7]); tiledlayout(1,2,'TileSpacing','compact');
@@ -163,7 +172,7 @@ h3 = plot(R{4}.t,R{4}.u2,'-','Color',col{4},'LineWidth',2.4);
 h2 = plot(R{3}.t,R{3}.u2,'-.','Color',col{3},'LineWidth',1.3);
 xlim([0 oc.T]); xticks(0:1:oc.T); ylim([0 1.05]); title('(b) Second-line treatment u_2^*(t)'); xlabel('Time (years)'); ylabel('Control intensity');
 grid on; box on; legend([h2 h3],names([3 4]),'Location','southwest');
-drawnow; exportgraphics(f4,'Figure_4_Optimal_controls.pdf','ContentType','vector');
+drawnow; exportgraphics(f4,'Figure4_Optimal_controls.pdf','ContentType','vector');
 
 %% 5. CONVERGENCE DIAGNOSTICS (Section 3.8, Table 6) ---------------------
 banner('NUMERICAL CONVERGENCE, Case III  (Section 3.8, Table 6)');
@@ -193,10 +202,22 @@ Nd = 200;
 % columns: inc prev rrn rrinc ltbi | CFR_I fL CFR_D D_D rho eS kappa xi2
 b25 = @(c) [0.75*c 1.25*c];          % +-25% where the source reports no interval
 rngs = [b25(tg(1)); 589 961; b25(tg(3)); b25(tg(4)); b25(tg(5)); ...
-        b25(fx.CFR_I); 0.1243 0.18; b25(fx.CFR_D); b25(fx.D_D); b25(fx.rho); b25(fx.eS); ...
-        1-1/1.15 1-1/16.32; 1/0.59-1 1/0.48-1];
+        b25(fx.CFR_I); b25(fx.fL); b25(fx.CFR_D); b25(fx.D_D); b25(fx.rho); b25(fx.eS); ...
+        1-1/1.15 1-1/16.32; 1/0.79-1 1/0.61-1];   % kappa: OR 95% CI; xi2: enrollment 61-79% in 2021-2024
 if isfile('lhs_samples.csv')
-    S = readmatrix('lhs_samples.csv','NumHeaderLines',1);       % samples used in the paper
+    fid = fopen('lhs_samples.csv','r'); first = fgetl(fid); frewind(fid);
+    hl = double(any(isletter(first)));                                 % 1 if the file has a header line
+    C = textscan(fid, repmat('%f',1,13), 'Delimiter', {',',' ','\t'}, 'MultipleDelimsAsOne', true, 'HeaderLines', hl);
+    fclose(fid); S = [C{:}];                                            % samples used in the paper
+    if all(S(:) >= 0 & S(:) <= 1)                                       % unit Latin hypercube design (0-1):
+        U = round(S, 5, 'significant');                                 % the design used in the paper (5 digits)
+        S = rngs(:,1)' + U.*(rngs(:,2)-rngs(:,1))';                     % scaled to the parameter ranges
+        fprintf('  LHS design in [0,1] scaled to the parameter ranges\n');
+    end
+    assert(isequal(size(S),[Nd 13]) && all(isfinite(S(:))), ...
+        'lhs_samples.csv must contain 200 rows and 13 numeric columns (found %d x %d)', size(S,1), size(S,2));
+    fprintf('  LHS file read: %d x %d; incidence %.1f-%.1f, latent %.0f-%.0f per 100,000\n', ...
+        size(S,1), size(S,2), min(S(:,1)), max(S(:,1)), min(S(:,5)), max(S(:,5)));
 else
     warning('lhs_samples.csv not found: a new sample is drawn, numbers will differ slightly.');
     rng(20261027); K = size(rngs,1); U = zeros(Nd,K);
@@ -206,7 +227,11 @@ end
 parNames = {'\beta','\phi','\psi','\tau','D_I','CFR_I','f_L','CFR_D','D_D','\rho','\epsilon_S','\kappa','\xi_2'};
 keep = false(Nd,1); PAR = nan(Nd,13); OUT = nan(Nd,9); EXT = nan(Nd,6); REJ = nan(Nd,6);
 o = oc; o.M = 200;
+tLHS = tic;
 for n = 1:Nd
+    if mod(n,20) == 0                                  % progress report, no effect on results
+        fprintf('  sample %3d of %d, %d accepted so far  (%.0f s)\n', n, Nd, sum(keep), toc(tLHS)); drawnow;
+    end
     f = fx; f.CFR_I = S(n,6); f.fL = S(n,7); f.CFR_D = S(n,8); f.D_D = S(n,9);
     f.rho = S(n,10); f.eS = S(n,11); f.kappa = S(n,12); f.xi2 = S(n,13);
     [thn, err] = calibrate(f, S(n,1:5), th, N0);
@@ -230,6 +255,11 @@ for n = 1:Nd
                 100*(1-mm{4}.PY_I/mn.PY_I), mm{3}.Deaths-mm{4}.Deaths, 100*(mm{2}.PY_D-mm{4}.PY_D)/mn.PY_D];
 end
 PAR = PAR(keep,:); OUT = OUT(keep,:); EXT = EXT(keep,:); nk = sum(keep);
+if nk < 20                                             % diagnostic instead of an indexing error
+    [~, e1] = calibrate(fx, S(1,1:5), th, N0);
+    error(['Only %d of %d LHS samples were accepted. Residual of sample 1 with the baseline parameters: %.1e. ' ...
+           'Check that lhs_samples.csv is the file sent with this code.'], nk, Nd, e1);
+end
 q = @(x) [median(x) prctile_(x,2.5) prctile_(x,97.5)];
 fprintf('  Admissible samples: %d of %d (%d rejected)\n', nk, Nd, Nd-nk);
 fprintf('  %-26s %8s %18s\n','Quantity','Median','95% interval');
@@ -301,8 +331,9 @@ end
 % ---- Figure 5: uncertainty ----
 f5 = figure(5); clf(f5); set(f5,'WindowStyle','normal','Name','Figure 5: Uncertainty and PRCC','NumberTitle','off','Units','centimeters','Position',[2 2 16 13]); tiledlayout(2,2,'TileSpacing','compact');
 nexttile(1); hold on;                                % (a) top left
-histogram(OUT(:,1),20,'FaceAlpha',0.6); histogram(OUT(:,2),20,'FaceAlpha',0.6);
-xline(1,'k--','LineWidth',1.5); legend({'R_{SS}','R_{DD}','threshold'},'Location','northwest');
+ha = histogram(OUT(:,1),20,'FaceAlpha',0.6); hb = histogram(OUT(:,2),20,'FaceAlpha',0.6);
+xline(1,'k--','LineWidth',1.5); ylim([0 1.3*max([ha.Values hb.Values])]);   % headroom for the legend
+legend({'R_{SS}','R_{DD}','threshold'},'Orientation','horizontal','Location','north','FontSize',9,'Box','off');   % one row above the bars, covers no data
 xlabel('Reproduction number'); ylabel('Samples');
 title(sprintf('(a) P(R_{DD} > 1) = %.2f', mean(OUT(:,2)>1))); box on;
 [~,ordp] = sort(abs(pr),'ascend'); vv = pr(ordp); vv = vv(:); isSig = abs(vv) > rcrit;
@@ -322,16 +353,17 @@ set(gca,'YTick',1:13,'YTickLabel',parNames(ordp),'TickLabelInterpreter','tex');
 ylim([0.4 13.6]); xlim([-1.45 1.45]); xticks(-1:0.5:1);
 xlabel('PRCC with MDR-TB reduction (Case III)'); title('(b) Global sensitivity'); grid on; box on;
 nexttile(3); hold on;                                % (c) bottom left
-histogram(OUT(:,3),15,'FaceAlpha',0.5); histogram(OUT(:,4),15,'FaceAlpha',0.5); histogram(OUT(:,5),15,'FaceAlpha',0.5);
-legend(names(2:4),'Location','northwest'); xlabel('Reduction in MDR-TB person-years (%)'); ylabel('Samples');
+h1 = histogram(OUT(:,3),15,'FaceAlpha',0.5); h2 = histogram(OUT(:,4),15,'FaceAlpha',0.5); h3 = histogram(OUT(:,5),15,'FaceAlpha',0.5);
+ylim([0 1.3*max([h1.Values h2.Values h3.Values])]);                 % headroom for the legend
+legend(names(2:4),'Orientation','horizontal','Location','north','FontSize',9,'Box','off'); xlabel('Reduction in MDR-TB person-years (%)'); ylabel('Samples');
 title('(c) Benefit under uncertainty'); box on;
-drawnow; exportgraphics(f5,'Figure_5_Uncertainty_and_PRCC.pdf','ContentType','vector');
+drawnow; exportgraphics(f5,'Figure5_Uncertainty_and_PRCC.pdf','ContentType','vector');
 
 %% 7. SENSITIVITY TO WEIGHTS, EFFICACIES AND BOUNDS (Section 3.10, Figure 6)
 banner('WEIGHTS, EFFICACIES, BOUNDS AND HORIZON  (Section 3.10, Figure 6)');
 o = oc; o.M = 250; o.use1 = 0; o.use2 = 0; ncR = metrics(solveOC(X0,P,o,N0),P,o);
 W2s = oc.W2*[0.1 1 3 10 30 100]; W1s = oc.W1*[0.1 1 3 10 30 100];
-xis = [0.69 0.83 0.96 1.08]; kaps = [0.13 0.5 0.77 0.94];
+xis = [0.27 0.40 0.54 0.64]; kaps = [0.13 0.5 0.77 0.94];
 HA = zeros(numel(xis),numel(W2s)); HB = zeros(numel(kaps),numel(W1s)); HBI = HB;
 for i = 1:numel(xis)
     for j = 1:numel(W2s)
@@ -405,7 +437,7 @@ VAL = [];
 o = oc; o.M = 250;
 fprintf('  %-26s %7s %7s %7s %8s %8s %7s %7s %7s %8s %8s %8s %8s\n','Re-estimation','psi','phi','R_DD','MDR/RR','acq.sh.', ...
         'MDR I','MDR II','MDR III','J(I)','J(II)','C2(III)','DS III');
-for rrp = 0.13           % 13% MDR among previously treated cases (national estimate)
+for rrp = rrpData       % 18% MDR/RR among previously treated cases, 2024 [WHO global TB database]
     tgV = tg; tgV(4) = rrp;
     [thV, eV] = calibrate(fx, tgV, th, N0, true); PV = derived(thV, fx, N0); XV = equilibrium(PV, N0);
     iV = indicators(XV, PV); [~, rdV] = R0s(PV); mV = runCases(XV, PV, o, use, N0);
@@ -414,10 +446,10 @@ for rrp = 0.13           % 13% MDR among previously treated cases (national esti
     fprintf('  %-26s %7.3f %7.3f %7.3f %8.2f %8.3f %6.1f%% %6.1f%% %6.1f%% %8.2f %8.2f %8.2f %7.1f%%  (res. %.1e)\n', ...
             sprintf('MDR prev. treated = %g%%',100*rrp), VAL(end,2:end));
 end
-cfrM = fzero(@(c) deathsFor(c, fx, tg, th, N0) - 44.5, [fx.CFR_I 0.2]);   % disease-induced deaths = 44.5
+cfrM = fzero(@(c) deathsFor(c, fx, tg, th, N0) - dData, [fx.CFR_I 0.2]);  % disease-induced deaths = data
 fM = fx; fM.CFR_I = cfrM; thM = calibrate(fM, tg, th, N0); PM = derived(thM, fM, N0); XM = equilibrium(PM, N0);
 mM = runCases(XM, PM, o, use, N0); rM = arrayfun(@(c) 100*(1-mM{c}.PY_D/mM{1}.PY_D), 2:4);
-fprintf('  Mortality 44.5: CFR_I = %.4f, MDR-TB reductions %.1f%%, %.1f%%, %.1f%%\n', cfrM, rM);
+fprintf('  Mortality %.1f: CFR_I = %.4f, MDR-TB reductions %.1f%%, %.1f%%, %.1f%%\n', dData, cfrM, rM);
 mB = runCases(X0, P, o, use, N0); rB = arrayfun(@(c) 100*(1-mB{c}.PY_D/mB{1}.PY_D), 2:4);
 fprintf('  Baseline (same grid):          MDR-TB reductions %.1f%%, %.1f%%, %.1f%%\n', rB);
 
@@ -425,7 +457,7 @@ fprintf('  Baseline (same grid):          MDR-TB reductions %.1f%%, %.1f%%, %.1f
 f6 = figure(6); clf(f6); set(f6,'WindowStyle','normal','Name','Figure 6: Robustness','NumberTitle','off','Units','centimeters','Position',[2 2 16 12]); tiledlayout(2,1,'TileSpacing','compact');
 heat(nexttile, HA, W2s, xis, 'Second-line weight W_2', 'Efficacy \xi_2', '(a) MDR-TB person-year reduction (%)');
 heat(nexttile, HB, W1s, kaps, 'DOT weight W_1', 'Efficacy \kappa', '(b) Acquired-resistance reduction (%)');
-drawnow; exportgraphics(f6,'Figure_6_Robustness.pdf','ContentType','vector');
+drawnow; exportgraphics(f6,'Figure6_Robustness.pdf','ContentType','vector');
 
 save('results_for_check.mat','fx','tg','th','P','X0','ind','RSS','RDD','ev','a_bif','b_bif','R','Mt','oc', ...
      'Ms','Jg','Jinit','HA','HB','HBI','JA2','Jcor','Hz','Umax','KE','OUT','PAR','nk','Nd','pr','rcrit', ...
@@ -438,6 +470,7 @@ fprintf('Figures 3-6 saved as vector PDF; all results saved to results_for_check
 %% =========================================================================
 function banner(txt)
     fprintf('\n%s\n %s\n%s\n', repmat('=',1,78), txt, repmat('=',1,78));
+    drawnow;                                           % show the output immediately
 end
 
 function P = derived(th, fx, N0)
